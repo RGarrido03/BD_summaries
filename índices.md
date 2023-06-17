@@ -3,8 +3,19 @@
 ```sql
 CREATE INDEX [name] ON [table_name]([attribute_name]);
 CREATE INDEX [name] ON [table_name]([attribute1], [attribute2], ...);
+CREATE INDEX [name] ON [table_name]([attribute1], [attribute2], ...) WHERE [attribute]=[value];
+CREATE INDEX [name] ON [table_name]([attribute1], [attribute2], ...) INCLUDE ([attribute3]);
+
+-- Clustered indexes
 CREATE CLUSTERED INDEX [name] ON [table_name]([attribute_name]);
 CREATE CLUSTERED INDEX [name] ON [table_name]([attribute1], [attribute2], ...);
+CREATE UNIQUE CLUSTERED INDEX [name] ON [table_name]([attribute_name]);
+CREATE UNIQUE CLUSTERED INDEX [name] ON [table_name]([attribute1], [attribute2], ...);
+
+-- Índices com parâmetros não default
+CREATE NONCLUSTERED INDEX [name] ON [table_name]([attribute_name]) WITH (FILLFACTOR = [int], PAD_INDEX = [ON/OFF]);
+
+-- Eliminar um índice
 DROP INDEX [name];
 ```
 
@@ -82,7 +93,7 @@ Existem dois tipos de índices, **ambos implementados em B-trees**:
     - A tabela está ordenada pelo índice, ou seja, a B-tree está ordenada pelo *cluster key index*.
     - Só existe um por relação. 
 - ***Non-clustered index***:
-    - Os índices apontam para a tabela base, que pode ser *clustered* ou *heap*. No caso de uma tabela *non-clustered*, o tuplo é identificado pelo seu *RowID*, no formato `[extent]:[página]:[row_offset]`.
+    - Os índices apontam para a tabela base, que pode ser *clustered* ou *heap* (ver secção [Tabelas *heap* vs *clustered*](#tabelas-heap-vs-clustered)). No caso de uma tabela *non-clustered*, o tuplo é identificado pelo seu *RowID*, no formato `[extent]:[página]:[row_offset]`.
     - Podem existir vários por relação.
 
 ## *B-Tree Page Split*
@@ -117,4 +128,61 @@ Só são indexadas partes dos tuplos.
 ### Inclusão de atributos não chave
 É possível incluir atributos que não são chave num índice *non-clustered*. As *queries* que utilizam este tipo de índice denominam-se *queries* cobertas.
 
-[continua]
+## Tabelas *heap* vs *clustered*
+As *heap tables* vê **os seus novos tuplos serem inseridos no final desta**, sem ordem. Assim, o índice (do tipo *non-clustered*) contém, em cada nó folha, um `RowID` da tabela.
+
+As *clustered tables* inserem os novos tuplos na respetiva B-tree, **consoante a ordem da *clustered index key***. Durante a inserção, podem ocorrer [*page splits*](#b-tree-page-split), que dependem das características da *primary key* e do facto de os novos tuplos terem uma ordem natural ou não.
+
+## Escolha do tipo de índices
+Um **índice *clustered*** deve ser usado em:
+- Chaves que não criam muitos [*page splits*](#b-tree-page-split).
+- Chaves pequenas.
+
+Os **índices *non-clustered*** são usados para melhorar os tempos de *queries*, sobretudo nas que possuem a cláusula `WHERE`. Devem ser utilizados em:
+- Atributos que são chaves estrangeiras de outras relações, de modo a obter um maior desempenho em `JOIN`s.
+- Atributos sobre os quais são efetuadas consultas ordenadas.
+
+## Otimização de *B-trees*
+Com o objetivo de minimizar o número de [*page splits*](#b-tree-page-split), surgem os seguintes parâmetros:
+- ***Fill factor***: Define a percentagem de espaço livre em cada página.
+- ***Pad index***: Define se o *fill factor* é aplicado nos nós folha.
+
+Deve-se tentar **encontrar um equilíbrio entre o desperdício de espaço e a frequência da ocorrência de *page splits***. Por exemplo, caso as inserções sejam ordenadas, o *fill factor* pode ser próximo de 100%, ao passo que em inserções sem ordem o *fill factor* deve rondar os 65% e os 85%.
+
+### Exemplo
+```sql
+-- Índice com 15% de espaço livre e intermediário
+CREATE NONCLUSTERED INDEX IxOrderNumber ON dbo.[Order](OrderNumber) WITH (FILLFACTOR = 85, PAD_INDEX = ON);
+```
+
+## Desfragmentação de índices
+Quando existem [*page splits*](#b-tree-page-split) ou remoções de tuplos, surgem espaços vazios nas páginas, o que acaba por ter algumas implicações não só no espaço ocupado desnecessariamente, como também na performance do SGBD.
+
+**Verificar regularmente a fragmentação dos índices** torna-se, portanto, uma tarefa importante.
+
+Caso o índice esteja bastante fragmentado, deve-se reconstruí-lo. Existem duas formas de o fazer, cada uma com as suas vantagens e desvantagens:
+
+```sql
+ALTER INDEX [name] ON [table_name] REORGANIZE
+```
+- Desfragmenta as folhas, de acordo com o *fill factor* definido (ver secção [Otimização de *B-trees*](#otimização-de-b-trees)).
+- É efetuado através de um conjunto pequeno de transações.
+- Não tem impacto nas instruções `INSERT`, `UPDATE` e `DELETE`.
+
+```sql
+ALTER INDEX ALL ON Frag REBUILD WITH (FILLFACTOR=[int])
+```
+- Reconstrói todos os índices completamente
+    - É equivalente a fazer `DROP` e depois `CREATE`
+- Permite alterar as características do índice previamente definidas (como, por exemplo, o *fill factor*).
+
+## Ferramentas disponíveis no SQL Server
+### *Execution plan*
+Permite ver, para uma *query*, quais os passos efetuados "internamente", incluindo consulta de índices, páginas, etc. Mostra o tempo de execução de cada passo, bem como o total.
+
+### SQL Server Profiler
+Provavelmente das aplicações mais feias que já vi na minha vida (e olhem que já vi muita merda), confusa *as fuck*, e, na verdade, eu nem sei bem como é que aquilo funciona.
+
+No entanto, parece que é útil (fonte: confia) capturar eventos e *queries* com isto, para poder analisar os resultados na ferramenta *Database Engine Tuning Advisor* e, assim, otimizar de forma consciente a base de dados.
+
+O SQL Server Management Studio é uma merda, periodt.

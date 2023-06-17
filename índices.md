@@ -1,6 +1,6 @@
 # Índices e otimização
 ## Sintaxe
-```sql
+```tsql
 CREATE INDEX [name] ON [table_name]([attribute_name]);
 CREATE INDEX [name] ON [table_name]([attribute1], [attribute2], ...);
 CREATE INDEX [name] ON [table_name]([attribute1], [attribute2], ...) WHERE [attribute]=[value];
@@ -154,7 +154,7 @@ Com o objetivo de minimizar o número de [*page splits*](#b-tree-page-split), su
 Deve-se tentar **encontrar um equilíbrio entre o desperdício de espaço e a frequência da ocorrência de *page splits***. Por exemplo, caso as inserções sejam ordenadas, o *fill factor* pode ser próximo de 100%, ao passo que em inserções sem ordem o *fill factor* deve rondar os 65% e os 85%.
 
 ### Exemplo
-```sql
+```tsql
 -- Índice com 15% de espaço livre e intermediário
 CREATE NONCLUSTERED INDEX IxOrderNumber ON dbo.[Order](OrderNumber) WITH (FILLFACTOR = 85, PAD_INDEX = ON);
 ```
@@ -166,14 +166,14 @@ Quando existem [*page splits*](#b-tree-page-split) ou remoções de tuplos, surg
 
 Caso o índice esteja bastante fragmentado, deve-se reconstruí-lo. Existem duas formas de o fazer, cada uma com as suas vantagens e desvantagens:
 
-```sql
+```tsql
 ALTER INDEX [name] ON [table_name] REORGANIZE
 ```
 - Desfragmenta as folhas, de acordo com o *fill factor* definido (ver secção [Otimização de *B-trees*](#otimização-de-b-trees)).
 - É efetuado através de um conjunto pequeno de transações.
 - Não tem impacto nas instruções `INSERT`, `UPDATE` e `DELETE`.
 
-```sql
+```tsql
 ALTER INDEX ALL ON Frag REBUILD WITH (FILLFACTOR=[int])
 ```
 - Reconstrói todos os índices completamente

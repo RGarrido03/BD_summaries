@@ -17,6 +17,10 @@ CREATE NONCLUSTERED INDEX [name] ON [table_name]([attribute_name]) WITH (FILLFAC
 
 -- Eliminar um índice
 DROP INDEX [name];
+
+-- Desfragmentar índices
+ALTER INDEX [name] ON [table_name] REORGANIZE
+ALTER INDEX ALL ON Frag REBUILD WITH (FILLFACTOR=[int])
 ```
 
 ## Contexto e definição
